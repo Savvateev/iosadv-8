@@ -1,6 +1,4 @@
 import Foundation
-import Combine
-import SwiftUI
 
 // MARK: - Жанры
 
@@ -8,7 +6,6 @@ enum WorkGenre: String, Codable, CaseIterable, Identifiable {
     case novel     = "Роман"
     case novella   = "Повесть"
     case story     = "Рассказ"
-    case pastoral  = "Современная пастораль"
     case play      = "Пьеса"
 
     var id: String { rawValue }
@@ -23,15 +20,15 @@ struct Award: Codable, Hashable {
 }
 
 struct Work: Codable, Identifiable, Hashable {
-    let id: String                 // латиница, slug: "tsar-ryba"
+    let id: String
     let title: String
     let genre: WorkGenre
-    let yearFirst: Int?            // первый год из источника
-    let yearsNote: String?         // как в источнике: "1968—1993"
-    var cycle: String? = nil       // цикл, если есть
+    let yearFirst: Int?
+    let yearsNote: String?
+    var cycle: String? = nil
     var awards: [Award] = []
-    var note: String? = nil        // пометки о происхождении данных
-    var imageName: String? = nil   // одна обложка, имя в Assets.xcassets
+    var note: String? = nil
+    var imageName: String? = nil
 
     /// Имя ассета: из imageName, иначе по соглашению "work_<id>"
     var resolvedImageName: String { imageName ?? "work_\(id)" }
@@ -55,8 +52,6 @@ struct WriterProfile: Codable, Hashable {
     var death: String = "29 ноября 2001, Красноярск"
     var portraitName: String? = "writer_portrait"
 }
-
-// MARK: - Данные (источник: ru.wikipedia.org, Астафьев, Виктор Петрович)
 
 extension Work {
     static let seed: [Work] = [
@@ -113,6 +108,8 @@ extension Adaptation {
                    imageName: "chaiki"),
         Adaptation(year: 1979, title: "Таёжная повесть", director: "Владимир Фетин",
                    imageName: "tayga"),
+        Adaptation(year: 1981, title: "Звездопад", director: "Игорь Таланкин",
+                   workId: "zvezdopad", imageName: "film_zvezdopad"),
         Adaptation(year: 1983, title: "Дважды рождённый", director: "Аркадий Сиренко",
                    note: "Автор сценария — сам Астафьев",
                    imageName: "dvajdyi"),
@@ -120,31 +117,18 @@ extension Adaptation {
                    note: "Автор сценария — сам Астафьев",
                    imageName: "my"),
         Adaptation(year: 1986, title: "Где-то гремит война", director: "Артур Войтецкий",
-                   note: "Автор сценария — сам Астафьев. Повесть «Где-то гремит война» в эту базу не входит",
+                   note: "Автор сценария — сам Астафьев. Исходная повесть в базу не входит",
                    imageName: "war"),
     ]
 }
 
-// MARK: - Хранилище
 
-final class WorkKnowledgeBase: ObservableObject {
-    @Published private(set) var works: [Work]
-    @Published private(set) var adaptations: [Adaptation]
-    @Published private(set) var writer: WriterProfile
+// База знаний (только чтение)
 
-    private let fileURL: URL
-
-    init(fileName: String = "astafyev_kb.json") {
-        self.fileURL = FileManager.default
-            .urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent(fileName)
-        self.works = Work.seed
-        self.adaptations = Adaptation.seed
-        self.writer = WriterProfile()
-        load()
-    }
-
-    // MARK: Выборки
+struct WorkKnowledgeBase {
+    let works: [Work] = Work.seed
+    let adaptations: [Adaptation] = Adaptation.seed
+    let writer = WriterProfile()
 
     func works(in genre: WorkGenre) -> [Work] {
         works.filter { $0.genre == genre }
@@ -162,64 +146,5 @@ final class WorkKnowledgeBase: ObservableObject {
 
     func adaptations(for workId: String) -> [Adaptation] {
         adaptations.filter { $0.workId == workId }
-    }
-
-    // MARK: Изменения
-
-    func add(_ work: Work) {
-        works.append(work)
-        save()
-    }
-
-    func update(_ work: Work) {
-        guard let i = works.firstIndex(where: { $0.id == work.id }) else { return }
-        works[i] = work
-        save()
-    }
-
-    func remove(id: String) {
-        works.removeAll { $0.id == id }
-        save()
-    }
-
-    func setImage(_ name: String?, forWork id: String) {
-        guard let i = works.firstIndex(where: { $0.id == id }) else { return }
-        works[i].imageName = name
-        save()
-    }
-
-    func setImage(_ name: String?, forAdaptation index: Int) {
-        guard adaptations.indices.contains(index) else { return }
-        adaptations[index].imageName = name
-        save()
-    }
-
-    // MARK: Сохранение в JSON
-
-    private struct Payload: Codable {
-        let works: [Work]
-        let adaptations: [Adaptation]
-        var writer: WriterProfile?
-    }
-
-    private func save() {
-        do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            let data = try encoder.encode(
-                Payload(works: works, adaptations: adaptations, writer: writer)
-            )
-            try data.write(to: fileURL, options: .atomic)
-        } catch {
-            print("Save error: \(error)")
-        }
-    }
-
-    private func load() {
-        guard let data = try? Data(contentsOf: fileURL),
-              let payload = try? JSONDecoder().decode(Payload.self, from: data) else { return }
-        works = payload.works
-        adaptations = payload.adaptations
-        writer = payload.writer ?? WriterProfile()
     }
 }
